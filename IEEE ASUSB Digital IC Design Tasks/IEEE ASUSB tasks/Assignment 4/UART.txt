@@ -1,0 +1,160 @@
+UART_Tx
+--------
+module UART_Tx
+(
+	input clk, clr_n,
+	output reg Tx
+);
+
+//Manipulating data...
+reg [7 : 0] data_in_present = 8'b0, data_in_next;
+reg [3 : 0] sel_present = 4'b0, sel_next;
+wire done = (sel_present == 9);
+
+//data_in_present logic...
+always @(posedge done, negedge clr_n)
+begin
+	if (clr_n == 0)
+		data_in_present <= 8'b0;
+	else
+		data_in_present <= data_in_next;
+end
+
+//sel_present logic...
+always @(posedge clk)
+	sel_present <= sel_next;
+
+//data_in_next logic...
+always @(*)
+	data_in_next = data_in_present + 1;
+
+//sel_next logic...
+always @(*)
+	sel_next = done ? 4'b0 : sel_present + 1;
+
+//MUX...
+always @(*)
+begin
+	case (sel_present)
+		4'd0 : Tx = 1'b0;	//Start bit.
+		4'd1 : Tx = data_in_present [0];
+		4'd2 : Tx = data_in_present [1];
+		4'd3 : Tx = data_in_present [2];
+		4'd4 : Tx = data_in_present [3];
+		4'd5 : Tx = data_in_present [4];
+		4'd6 : Tx = data_in_present [5];
+		4'd7 : Tx = data_in_present [6];
+		4'd8 : Tx = data_in_present [7];
+		4'd9 : Tx = 1'b1;	//End bit.
+	endcase
+end
+
+endmodule
+-----------------------------------------------------------------------------------
+
+UART_Rx
+--------
+module UART_Rx
+(
+	input clk, Rx,
+	output reg [7 : 0] data_out
+);
+
+//Manipulating variables...
+reg [3 : 0] sel_present = 4'b0, sel_next;
+reg [0 : 1] start_end;
+
+//sel_present logic...
+always @(posedge clk)
+	sel_present <= sel_next;
+
+//sel_next logic...
+always @(*)
+	sel_next = (sel_present == 9) ? 4'b0 : sel_present + 1;
+
+//DeMux...
+always @(*)
+begin
+	case (sel_present)
+		4'd0 : start_end [0] = Rx;	//Start bit.
+		4'd1 : data_out [0] = Rx;
+		4'd2 : data_out [1] = Rx;
+		4'd3 : data_out [2] = Rx;
+		4'd4 : data_out [3] = Rx;
+		4'd5 : data_out [4] = Rx;
+		4'd6 : data_out [5] = Rx;
+		4'd7 : data_out [6] = Rx;
+		4'd8 : data_out [7] = Rx;
+		4'd9 : start_end [1] = Rx;	//End bit.
+	endcase
+end
+
+endmodule
+-------------------------------------------------------------------------------------
+UART_system
+------------
+module UART_system
+(
+	input clk, clr_n, transmit,
+	output  [7 : 0] data_out
+);
+
+//Interconnects...
+wire Tx_Rx, receive;
+
+//Module instantiations...
+UART_Tx M0
+(
+	.clk(clk),
+	.clr_n(clr_n),
+	.transmit(transmit),
+	.Tx(Tx_Rx)
+);
+
+UART_Rx M1
+(
+	.clk(clk),
+	.Rx(Tx_Rx),
+	.data_out(data_out)
+);
+
+endmodule
+-------------------------------------------------------------------------------------
+UART_system_tb
+---------------
+module UART_system_tb
+();
+
+//Controls and monitors...
+reg clk_tb, clr_n_tb;
+wire [7 : 0] data_out_tb;
+
+//Module instantiation...
+UART_system DUT
+(
+	.clk(clk_tb),
+	.clr_n(clr_n_tb),
+	.data_out(data_out_tb)
+);
+
+//Clock generation...
+initial
+	clk_tb = 1'b0;
+
+always
+	#25
+	clk_tb = ~clk_tb;
+
+//Testbench
+initial
+begin
+	clr_n_tb = 1'b1;
+
+	#700
+	clr_n_tb = 1'b0;
+
+	#50
+	clr_n_tb = 1'b1;
+end
+
+endmodule

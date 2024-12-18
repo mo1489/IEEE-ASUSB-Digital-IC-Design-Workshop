@@ -1,0 +1,118 @@
+VGA_sync
+---------
+module VGA_sync
+(
+	input clk, clr_n,
+	output reg [9 : 0] pixel_x, pixel_y,
+	output reg H_sync, V_sync, video_on
+);
+
+//Manipulating registers...
+reg [9 : 0] pixel_x_present = 'b0, pixel_x_next, pixel_y_present = 'b0, pixel_y_next;
+
+//Present state logic...
+always @(posedge clk, negedge clr_n)
+begin
+	if (!clr_n)
+	begin
+		pixel_x_present <= 10'b0;
+		pixel_y_present <= 10'b0;
+	end
+
+	else
+	begin
+		pixel_x_present <= pixel_x_next;
+		pixel_y_present <= pixel_y_next;
+	end
+end
+
+//Next state logic...
+always @(*)
+begin
+	//pixel_x, pixel_y...
+	pixel_x_next = (pixel_x_present == 799) ? 10'b0 : pixel_x_present + 1;
+
+	if (pixel_x_present == 799)
+		pixel_y_next = (pixel_y_present == 524) ? 10'b0 : pixel_y_present + 1;
+	else
+		pixel_y_next = pixel_y_present;
+
+end
+
+//Output logic...
+assign pixel_x = pixel_x_present;
+assign pixel_y = pixel_y_present;
+
+//H sync...
+assign H_sync = (pixel_x_present >= 656 && pixel_x_present <= 751) ? 1'b0 : 1'b1;
+
+//V sync...
+assign V_sync = (pixel_y_present >= 513 && pixel_y_present <= 514) ? 1'b0 : 1'b1;
+
+//video on...
+assign video_on = (pixel_x_present <= 639 && pixel_y_present <= 479) ? 1'b1 : 1'b0;
+
+endmodule
+-----------------------------------------------------------------------------------------------------
+
+pixel_generation
+-----------------
+module pixel_generation
+(
+	input clk, en, clr_n,
+	input [9 : 0] pixel_x, pixel_y,
+	output reg [2 : 0] RGB
+);
+
+always @(posedge clk, posedge en, negedge en, negedge clr_n)
+begin
+	if (!clr_n)
+		RGB <= 3'b000;
+	else
+	begin
+		if (en)
+			RGB <= 3'b110; //Generating a full screem of yellow color (R = 1, G = 1, B = 0 ---> yellow).
+		else
+			RGB <= 3'b0;
+	end
+end
+
+endmodule
+-----------------------------------------------------------------------------------------------------
+
+VGA_controller
+---------------
+module VGA_controller
+(
+	input clk, clr_n,
+	output [2 : 0] RGB,
+	output H_sync, V_sync
+);
+
+//Interconnects...
+wire video_on_en;
+wire [9 : 0] pixel_x, pixel_y;
+
+//Module instantiations...
+VGA_sync M0
+(
+	.clk(clk),
+	.clr_n(clr_n),
+	.pixel_x(pixel_x),
+	.pixel_y(pixel_y),
+	.H_sync(H_sync),
+	.V_sync(V_sync),
+	.video_on(video_on_en)
+);
+
+pixel_generation M1
+(
+	.clk(clk),
+	.pixel_x(pixel_x),
+	.pixel_y(pixel_y),
+	.en(video_on_en),
+	.clr_n(clr_n),
+	.RGB(RGB)
+);
+
+endmodule
